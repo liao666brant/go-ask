@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "skills": {
+    "index-project": {
+      "source": "liao666brant/skills",
+      "commit": "dcc62acc7e521da656f15d7af86adbe6824538f4",
+      "sourceType": "github",
+      "skillPath": "skills/index-project/SKILL.md",
+      "computedHash": "b5e944abc1f23b6dc9a4127f577f312ff8c4f36e8211b382d1c4b45d7159837f"
+    },
+    "nsgo": {
+      "source": "nsgo-dev/nsgo",
+      "commit": "3f955acbb87dfef8f349d245d50a4aa2e0869b7a",
+      "sourceType": "github",
+      "skillPath": "skills/nsgo/SKILL.md",
+      "computedHash": "8678856f536af5a88d9e73ba21fcbe1fd051eb8f3de6d16e96981a924779f4b2"
+    }
+  }
+}

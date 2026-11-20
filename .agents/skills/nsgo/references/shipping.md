@@ -1,0 +1,74 @@
+# Project layout and shipping
+
+## Layout
+
+`go tool nsgo init` writes the layout every app keeps; `examples/hello` in the module directory is the smallest complete one.
+
+| Path | What |
+| --- | --- |
+| `app.go` (or `main.go`) | The main package: `Root`, or `App` for a desktop app opening its own windows, and `main` calling `nsgo.Run` |
+| `app_test.go` | `nsgotest` tests, with `TestMain` calling `nsgotest.Main` |
+| `nsgo.yaml` | The app's name, id, version, icons, targets and packaging |
+| `locales/` | A YAML catalog per language (`en.yaml`, `zh-Hans.yaml`) and the package the tool generates its functions into (`catalog_gen.go`); never edit generated files |
+| `assets/` | Icons (`AppIcon.icon`, `Icon.png`) and what the app embeds; `assets/*-dev.*` icons mark dev builds |
+| `.nsgo/` | The tool's own files, such as TSX types and test screenshots; ignore it in Git |
+| `dist/` | Packages `build` writes; ignore it in Git |
+
+Keep packages the app imports in the same module; `go tool nsgo check` and `test` take a directory without `nsgo.yaml`, or `./...`, as every package under it.
+
+## nsgo.yaml
+
+```yaml
+name: Hello
+id: dev.example.hello          # without it, dev.nsgo. and the name's letters and digits
+version: 0.1.0
+icon:
+  apple: assets/AppIcon.icon   # macOS, iOS and watchOS
+  png: assets/Icon.png         # every other target
+dev:
+  target: native               # what `nsgo dev` runs without -target
+build:
+  targets: [macos_arm64, windows_x64, linux_x64, ios, android_arm64, web]
+  # tags: [timetzdata]         # Go build tags every build, test and check of the app takes
+  # ldflags: [-X main.releaseDate=2026-11-17]  # the app's own linker flags; -ldflags on build and test adds more
+# i18n: { dir: locales, source: en }
+# apple: { info: { NSCameraUsageDescription: Scans receipts. } }
+# release: { github: me/hello }
+# updates: { key: <public key from nsgo keygen> }
+```
+
+A flag replaces the value it names (`-target`, `-version`, `-output`, or the signing profiles `-profile`, `-widgets-profile` and `-clip-profile`); `go tool nsgo build -h` lists them. Read the version-matched [Building and shipping](https://nsgo.dev/docs/building.md) page for the rest: installers, store packages, signing, notarizing, GitHub releases, updates, file types, App Clips, widgets and mini programs.
+
+## Build
+
+```sh
+go tool nsgo build                       # every target nsgo.yaml lists
+go tool nsgo build -target web           # or all, macos, windows, macos_arm64, ios, android_arm64, miniprogram_wechat, ...
+go tool nsgo build -run -device "iPhone" # build and start or install it
+go tool nsgo build -channel store        # store packages instead of installers and self-updates
+go tool nsgo build -release-notes notes.md  # the release's notes, which the update prompts show
+```
+
+Packages land in `dist/<name>-<version>-<target>`, and everything to hand out in `dist/releases`, each file named `<name>-<version>-<system>-<arch>` with its `.sha256`. Builds are release builds; `go tool nsgo dev -release` runs one with hot reload for measuring.
+
+## Documents
+
+Declare `file_types` in `nsgo.yaml` and handle paths with `desktop.OnOpenFiles`. macOS, Windows (NSIS/MSIX) and Linux packages register them; Windows retains the user's default handler. Linux infers common extensions from a fixed table and defines unknown app-owned types as `application/x-<type id>`; set `mime: [video/mp4]` to reference existing types, especially for unknown imported extensions. AppImage needs desktop integration to install the bundled entry and any custom MIME definitions.
+
+Declare `url_schemes: [myapp]` for the app's own links and handle them with `desktop.OnOpenLinks`, or `mobile.OnOpenLinks` on iOS. The macOS and iOS apps, the NSIS installer and MSIX package, and the Linux desktop entry register them; on Windows and Linux a second launch hands its link to the running app. The handler hears any URL the app is started with, so check the scheme, and confirm with the user before a link changes anything.
+
+## Secrets
+
+Never commit secret keys or passwords. The tool reads them from the environment: `NSGO_UPDATES_KEY` for update feeds, `NSGO_KEYSTORE_PASSWORD` and `NSGO_KEY_PASSWORD` for Android keystores, `NSGO_CERTIFICATE_PASSWORD` for a Windows code signing certificate, `NSGO_NOTARY_KEY`, `NSGO_NOTARY_KEY_ID` and `NSGO_NOTARY_ISSUER` for notarizing in CI, `NSGO_ROOT_KEY` and `NSGO_RELEASE_KEY` for signed TSX packages. Public keys belong in `nsgo.yaml` and the app's code.
+
+For an adaptive Android launcher icon, set `icon.android.foreground` and `background` (a PNG or a `"#RRGGBB"` color), and `monochrome` for Android 13's themed icons: square 432 px layers with the logo inside the center 264 px, which every launcher mask keeps ([Building](https://nsgo.dev/docs/building.md)).
+
+## Permissions and platform entries
+
+Ask for a permission where the app uses it, through `cx`'s permission calls, and explain it in `apple.info`'s usage descriptions; on Android, `android.permissions` adds manifest permissions beyond the runtime's. An app calling `cx.SignInWithApple` sets `apple.sign_in_with_apple: true`, which signs it with the entitlement the sheet needs, one used beside other apps on an iPad sets `apple.requires_full_screen: false`, for Split View, Slide Over and Stage Manager, and lays out at whatever size `Env` reports; and one selling in-app purchases sets `apple.purchases: true`, which bundles StoreKit's library; it shows the store's `DisplayPrice`, never a price of its own, has its server verify a transaction's `Signed` JWS before delivering it, finishes it with `cx.FinishTransaction`, and registers `cx.OnPurchaseUpdate` as it starts. Check `cx.Env()` (`CanRecognizeSpeech`, `CanSpeak`, `CanPurchase`, `HasWebView` and the rest) before using a service a target may lack, rather than testing the target's name.
+
+Apple bundles carry a `PrivacyInfo.xcprivacy` declaring the required-reason APIs NSGo uses; declare the app's own under `apple.privacy` (`accessed_apis`, `tracking`, `tracking_domains`, `collected_data`) or in `resources/PrivacyInfo.xcprivacy`, which is merged. A host app linking the static `-embed` library declares NSGo's in its own manifest ([Building](https://nsgo.dev/docs/building.md#store-packages)).
+
+## Embedding
+
+`go tool nsgo build -embed -target ios|android_arm64` packages an app as an XCFramework or an AAR for a host app of your own, `nsgo.NewView` shows one in a Go desktop program, and the web build's loader puts apps in a page. `examples/embed-*` show each host ([Embedding](https://nsgo.dev/docs/embedding.md)).
