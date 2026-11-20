@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Go Ask
+Comment=划词翻译与 AI 快速问答
+Exec=go-ask
+Icon=dev.goask.GoAsk
+Terminal=false
+Categories=Utility;Education;
+StartupNotify=false

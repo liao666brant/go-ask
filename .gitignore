@@ -1,0 +1,15 @@
+# Portable releases and local Go executables
+/dist/
+/goask
+/goask.exe
+/go-ask
+/go-ask.exe
+
+# NSGo development files and Go test output
+/.nsgo/
+*.test
+*.test.exe
+/coverage.out
+
+# Python packaging and dictionary scripts
+__pycache__/

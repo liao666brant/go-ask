@@ -1,0 +1,7 @@
+name: Go Ask
+id: dev.goask.GoAsk
+version: 0.1.0
+icon:
+  png: assets/icon.png
+build:
+  output: dist
