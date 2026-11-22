@@ -73,21 +73,14 @@ func (a *application) startTranslation(query translationQuery, forceOnline bool)
 		return
 	}
 	a.loadCredentials(a.cx)
-	cfg := a.serviceConfig()
-	for _, p := range []struct {
-		id      string
-		enabled bool
-	}{
-		{service.DeepL, a.pref.DeepL && cfg.DeepLKey != ""},
-		{service.Baidu, a.pref.Baidu && cfg.BaiduAppID != "" && cfg.BaiduSecret != ""},
-		{service.AI, a.pref.AI && cfg.Model != "" && cfg.BaseURL != ""},
-	} {
-		if p.enabled {
-			a.translations = append(a.translations, translation{provider: p.id, pending: true})
+	for _, p := range service.Providers {
+		pref, _ := a.providerSettings(p.ID)
+		if _, err := a.providerConfig(p.ID); pref.Translate && err == nil {
+			a.translations = append(a.translations, translation{provider: p.ID, pending: true})
 		}
 	}
 	if len(a.translations) == 0 {
-		a.note.Set("请在设置中启用并配置至少一个翻译服务。")
+		a.note.Set("请在设置中启用免配置翻译来源，或配置其他翻译服务。")
 		return
 	}
 	ctx, cancel := context.WithCancel(a.lifetime)
@@ -100,8 +93,16 @@ func (a *application) startTranslation(query translationQuery, forceOnline bool)
 }
 func (a *application) requestTranslation(ctx context.Context, i int) {
 	run := a.translationID
-	cfg := a.serviceConfig()
 	p := a.translations[i].provider
+	pref, _ := a.providerSettings(p)
+	cfg, err := a.providerConfig(p)
+	if !pref.Translate || err != nil {
+		r := &a.translations[i]
+		r.pending = false
+		r.failure = "请先在设置中启用并配置此服务"
+		a.resultsVersion.Update(increment)
+		return
+	}
 	query := a.submitted
 	go func() {
 		value, err := service.Translate(ctx, cfg, p, query.text, query.source, query.target)

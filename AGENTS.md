@@ -20,9 +20,9 @@ flowchart LR
 
 ## 模块索引
 
-- [internal/app](internal/app/AGENTS.md) 管理桌面窗口、托盘和应用状态。翻译和问答流程分别在 `translation.go`、`chat.go`，界面和工作流测试也在此包。
+- [internal/app](internal/app/AGENTS.md) 管理桌面窗口、托盘、设置与多服务调度。翻译和问答流程分别在 `translation.go`、`chat.go`。
 - [internal/selection](internal/selection/AGENTS.md) 读取前台应用的选区。Windows 和 Linux 分别实现同一个 `selection.Text` 入口。
-- [internal/service](internal/service/AGENTS.md) 实现 DeepL、百度翻译和 OpenAI 兼容接口。新增服务时，将认证、请求和响应解析放在这里。
+- [internal/service](internal/service/AGENTS.md) 提供服务目录，适配免配置翻译、云翻译和 OpenAI 兼容接口。认证、请求和响应解析放在此包。
 - [internal/data](internal/data/AGENTS.md) 负责 SQLite 会话历史与离线词典。更新词库前阅读 [数据来源与生成说明](internal/data/dictionary/SOURCE.md)。
 - `assets/` 存放图标和 Linux 桌面入口。测试与被测代码放在同一目录。
 

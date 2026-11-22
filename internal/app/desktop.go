@@ -16,14 +16,16 @@ import (
 )
 
 type desktopHost struct {
-	app        *application
-	scope      *core.Scope
-	content    *core.Scope
-	panel      *desktop.Window
-	hotkey     string
-	activeKey  *core.Scope
-	changing   bool
-	showTicket uint64
+	app              *application
+	scope            *core.Scope
+	content          *core.Scope
+	panel            *desktop.Window
+	panelHidesOnBlur bool
+	stopIdle         func() bool
+	hotkey           string
+	activeKey        *core.Scope
+	changing         bool
+	showTicket       uint64
 }
 
 func runDesktop(a *application, trayIcon []byte) {
@@ -31,14 +33,7 @@ func runDesktop(a *application, trayIcon []byte) {
 		h := &desktopHost{app: a, scope: cx}
 		a.host = h
 		desktop.SetShutdownMode(cx, desktop.ShutdownOnExplicit)
-		h.panel = desktop.OpenPanel(cx, desktop.PanelOptions{Width: 660, Height: 510}, func(panel *core.Scope) core.Node {
-			h.content = panel
-			return a.root(panel)
-		})
-		h.panel.OnClosing(cx, func(close *desktop.WindowClosing) {
-			close.Cancel()
-			h.hide()
-		})
+		a.initUI(cx)
 		desktop.NewTray(cx, desktop.TrayOptions{
 			Icon: trayIcon, Tooltip: "Go Ask", OnClick: func() { h.show("") },
 			Menu: func() []desktop.MenuItem {
@@ -64,7 +59,7 @@ func (h *desktopHost) openSettings() {
 	h.showTicket++
 	h.scope.Run(func() {
 		desktop.OpenWindow(h.scope, desktop.WindowOptions{
-			Key: "settings", Title: "Go Ask 设置", Width: 580, Height: 620,
+			Key: "settings", Title: "Go Ask 设置", Width: 648, Height: 600,
 			Constraints: desktop.WindowConstraints{MinWidth: 400, MinHeight: 340},
 		}, h.app.settingsView)
 	})
@@ -74,7 +69,7 @@ func (h *desktopHost) openAbout() {
 	h.showTicket++
 	h.scope.Run(func() {
 		desktop.OpenWindow(h.scope, desktop.WindowOptions{
-			Key: "about", Title: "关于 Go Ask", Width: 400, Height: 230,
+			Key: "about", Title: "关于 Go Ask", Width: 400, Height: 248,
 			Constraints: desktop.WindowConstraints{NoResize: true},
 		}, aboutView)
 	})
@@ -85,6 +80,33 @@ func (h *desktopHost) hide() {
 	h.panel.Hide()
 }
 
+func (h *desktopHost) closePanel() {
+	h.panel.Close()
+	h.panel, h.content = nil, nil
+	h.app.editor = core.Ref{}
+}
+
+func (h *desktopHost) cancelPanelRelease() {
+	if h.stopIdle != nil {
+		h.stopIdle()
+		h.stopIdle = nil
+	}
+}
+
+func (h *desktopHost) schedulePanelRelease() {
+	h.cancelPanelRelease()
+	seconds := h.app.pref.PanelIdleSeconds
+	if seconds <= 0 || h.panel == nil || h.panel.Visible() {
+		return
+	}
+	h.scope.Run(func() {
+		h.stopIdle = h.scope.AfterFunc(time.Duration(seconds)*time.Second, func() {
+			h.stopIdle = nil
+			h.closePanel()
+		})
+	})
+}
+
 func (h *desktopHost) quit() {
 	if h.app.cx != nil {
 		h.app.stopChat()
@@ -92,16 +114,77 @@ func (h *desktopHost) quit() {
 	h.scope.Quit()
 }
 
-func (h *desktopHost) resize(height core.Points) {
-	if h.content != nil {
-		desktop.SetWindowFrame(h.content, desktop.WindowFrame{Height: height})
+func (h *desktopHost) show(text string) {
+	h.showTicket++
+	h.cancelPanelRelease()
+	h.ensurePanel()
+	// NSGo resets its blur tracking when asked to focus an already focused panel.
+	if !h.panelHidesOnBlur || !h.panel.Visible() || desktop.FrontmostApp(h.scope).PID != os.Getpid() {
+		h.panel.Focus()
+	}
+	h.app.onDesktopShow(text)
+}
+
+func (h *desktopHost) ensurePanel() {
+	hideOnBlur := h.panelBlurEnabled()
+	if h.panel != nil && h.panelHidesOnBlur != hideOnBlur {
+		h.closePanel()
+	}
+	if h.panel == nil {
+		h.openPanel(hideOnBlur)
 	}
 }
 
-func (h *desktopHost) show(text string) {
-	h.showTicket++
+func (h *desktopHost) panelBlurEnabled() bool {
+	return h.app.pref.HidePanelOnBlur && !h.app.pinned.GetUntracked()
+}
+
+func (h *desktopHost) openPanel(hideOnBlur bool) {
+	h.scope.Run(func() {
+		panel := desktop.OpenPanel(h.scope, desktop.PanelOptions{
+			Width: panelWidth, Height: panelMaxHeight, FitContent: true, HideOnBlur: hideOnBlur,
+		}, h.app.root)
+		h.panel, h.panelHidesOnBlur = panel, hideOnBlur
+		h.content.Run(func() {
+			wasVisible := false
+			h.content.Effect(func() {
+				visible := panel.Visible()
+				if h.panel != panel {
+					return
+				}
+				if visible {
+					h.cancelPanelRelease()
+				} else if wasVisible {
+					h.schedulePanelRelease()
+				}
+				wasVisible = visible
+			})
+		})
+		panel.OnClosing(h.scope, func(close *desktop.WindowClosing) {
+			close.Cancel()
+			h.hide()
+		})
+	})
+}
+
+func (h *desktopHost) togglePanelPin() {
+	h.app.pinned.Set(!h.app.pinned.GetUntracked())
+	hideOnBlur := h.panelBlurEnabled()
+	if !h.panel.Visible() || h.panelHidesOnBlur == hideOnBlur {
+		return
+	}
+	oldPanel := h.panel
+	var frame desktop.WindowFrame
+	if desktop.CanPlaceWindows(h.content) {
+		frame = h.content.Env().WindowFrame()
+	}
+	h.openPanel(hideOnBlur)
 	h.panel.Focus()
-	h.app.onDesktopShow(text)
+	if frame.Move {
+		desktop.SetWindowFrame(h.content, frame)
+	}
+	// Let the replacement take focus before destroying the foreground window.
+	h.scope.Post(oldPanel.Close)
 }
 
 // Capture the selection before giving our panel focus. UI Automation providers

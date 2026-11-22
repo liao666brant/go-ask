@@ -66,9 +66,11 @@ func (a *application) send() {
 		return
 	}
 	a.loadCredentials(a.cx)
-	cfg := a.serviceConfig()
-	if cfg.BaseURL == "" || cfg.Model == "" {
-		a.note.Set("请先在设置中填写 AI 服务地址和模型。")
+	providerID := a.chatProviderID()
+	provider, _ := service.ProviderByID(providerID)
+	cfg, configErr := a.providerConfig(providerID)
+	if !provider.AI || configErr != nil {
+		a.note.Set("请先在设置中配置并选择问答提供商。")
 		return
 	}
 	if a.conversation == 0 {

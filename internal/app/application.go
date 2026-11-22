@@ -22,7 +22,7 @@ type application struct {
 	lifetime         context.Context
 	editor           core.Ref
 	page, mode, note *core.Signal[string]
-	pendingSelection string
+	pinned           *core.Signal[bool]
 
 	source, target, query *core.Signal[string]
 	resultsVersion        *core.Signal[int]
@@ -56,15 +56,11 @@ func (a *application) onHotkeyError(err error) {
 	}
 }
 func (a *application) focusEditor() {
-	if a.cx != nil {
-		a.cx.Post(func() { a.editor.Focus() })
+	if content := a.host.content; content != nil {
+		content.Post(func() { a.editor.Focus() })
 	}
 }
 func (a *application) onDesktopShow(selection string) {
-	if a.cx == nil {
-		a.pendingSelection = selection
-		return
-	}
 	a.mode.Set("translate")
 	a.page.Set("work")
 	if strings.TrimSpace(selection) != "" {
@@ -88,6 +84,7 @@ func (a *application) initUI(cx *core.Scope) {
 	a.query = core.NewSignal(cx, "")
 	a.question = core.NewSignal(cx, "")
 	a.note = core.NewSignal(cx, a.hotkeyError)
+	a.pinned = core.NewSignal(cx, false)
 	a.partial = core.NewSignal(cx, "")
 	a.resultsVersion = core.NewSignal(cx, 0)
 	a.messagesVersion = core.NewSignal(cx, 0)
@@ -98,9 +95,6 @@ func (a *application) initUI(cx *core.Scope) {
 		a.note.Set(err.Error())
 	} else if len(hist) > 0 {
 		a.openConversation(hist[0].ID)
-	}
-	if a.pendingSelection != "" {
-		a.onDesktopShow(a.pendingSelection)
 	}
 }
 

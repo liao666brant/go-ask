@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	DeepL = "DeepL"
-	Baidu = "Baidu"
-	AI    = "AI"
+	DeepL = "deepl"
+	Baidu = "baidu"
+	AI    = "openai"
 )
 
 type Config struct {
@@ -28,6 +28,10 @@ type Config struct {
 	BaseURL     string
 	APIKey      string
 	Model       string
+	Region      string
+	FolderID    string
+	AppID       string
+	AppSecret   string
 }
 
 type Message struct {
@@ -45,11 +49,35 @@ func Translate(ctx context.Context, cfg Config, provider, text, source, target s
 		return "", errors.New("请填写原文并选择目标语言")
 	}
 	switch provider {
+	case MicrosoftBuiltIn:
+		return translateMicrosoftBuiltIn(ctx, text, source, target)
+	case GoogleBuiltIn:
+		return translateGoogleBuiltIn(ctx, text, source, target)
+	case YandexBuiltIn:
+		return translateYandexBuiltIn(ctx, text, source, target)
+	case TransmartBuiltIn:
+		return translateTransmartBuiltIn(ctx, text, source, target)
+	case ICibaBuiltIn:
+		return translateICibaBuiltIn(ctx, text, source, target)
 	case DeepL:
 		return translateDeepL(ctx, cfg, text, source, target)
 	case Baidu:
 		return translateBaidu(ctx, cfg, text, source, target)
-	case AI:
+	case Azure:
+		return translateAzure(ctx, cfg, text, source, target)
+	case Google:
+		return translateGoogle(ctx, cfg, text, source, target)
+	case Yandex:
+		return translateYandex(ctx, cfg, text, source, target)
+	case Youdao:
+		return translateYoudao(ctx, cfg, text, source, target)
+	case Hunyuan:
+		return translateHunyuan(ctx, cfg, text, source, target)
+	case MTran:
+		return translateMTran(ctx, cfg, text, source, target)
+	case QwenMT:
+		return translateQwenMT(ctx, cfg, text, source, target)
+	case AI, Zhipu, DeepSeek:
 		prompt := "你是翻译器。将用户的全部文本翻译为 " + target + "。保留原文段落和格式，仅输出译文。"
 		if source != "" && source != "auto" {
 			prompt += "原文语言为 " + source + "。"

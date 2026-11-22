@@ -1,8 +1,6 @@
 package app
 
 import (
-	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 
@@ -19,15 +17,12 @@ func Run(trayIcon []byte) error {
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	a := &application{configPath: filepath.Join(dir, "settings.json"), pref: preferences{Hotkey: "ctrl+q", DeepL: true, Baidu: true, AI: true, BaseURL: "https://api.openai.com/v1"}}
-	raw, err := os.ReadFile(a.configPath)
-	if err == nil {
-		if err = json.Unmarshal(raw, &a.pref); err != nil {
-			return err
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
+	path := filepath.Join(dir, "settings.json")
+	pref, err := loadPreferences(path)
+	if err != nil {
 		return err
 	}
+	a := &application{configPath: path, pref: pref}
 	a.db, err = data.Open(filepath.Join(dir, "history.db"))
 	if err != nil {
 		return err

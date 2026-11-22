@@ -20,7 +20,7 @@ func Chat(ctx context.Context, cfg Config, messages []Message, onDelta func(stri
 // ChatEndpoint 接受兼容服务的基础地址，也接受完整的 Chat Completions 地址。
 func ChatEndpoint(base string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(base))
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Hostname() == "" || u.User != nil || u.ForceQuery || u.RawQuery != "" || u.Fragment != "" {
 		return "", errors.New("请填写有效的 AI 服务基础地址，例如 https://api.openai.com/v1")
 	}
 	if u.Scheme != "https" && u.Scheme != "http" {
