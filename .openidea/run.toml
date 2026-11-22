@@ -1,0 +1,20 @@
+[[configurations]]
+id = "user:c93a67bb1"
+name = "go build"
+kind = "go"
+command = "go"
+args = ["build", "."]
+debug-adapter = "delve"
+params = { goKind = "build", programArgv = "[]", runAfterBuild = "true", scope = "package", target = ".", useTags = "true" }
+
+[[configurations]]
+id = "user:build-go-ask-windows"
+name = "构建 Go Ask（Windows x64）"
+kind = "program"
+command = "go"
+args = [
+    "build", "-trimpath",
+    "-ldflags=-s -w -H=windowsgui -X github.com/nsgo-dev/nsgo/core.appID=dev.goask.GoAsk",
+    "-o", "go-ask.exe", ".",
+]
+env = { GOOS = "windows", GOARCH = "amd64", CGO_ENABLED = "0" }
