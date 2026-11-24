@@ -69,7 +69,7 @@ func (h *desktopHost) openAbout() {
 	h.showTicket++
 	h.scope.Run(func() {
 		desktop.OpenWindow(h.scope, desktop.WindowOptions{
-			Key: "about", Title: "关于 Go Ask", Width: 400, Height: 248,
+			Key: "about", Title: "关于 Go Ask", Width: 420, Height: 268,
 			Constraints: desktop.WindowConstraints{NoResize: true},
 		}, aboutView)
 	})

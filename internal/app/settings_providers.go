@@ -47,7 +47,7 @@ func (a *application) providerSettingsView(cx *core.Scope, status *core.Signal[s
 			}
 			if provider := page.selected.Get(); provider != nil {
 				if provider.BuiltIn {
-					return a.builtInProviderForm(cx, provider, status, func() { pick(nil) })
+					return enterReveal(cx, 0, 6, a.builtInProviderForm(cx, provider, status, func() { pick(nil) }))
 				}
 				draft := drafts[provider.ID]
 				if draft == nil {
@@ -55,13 +55,13 @@ func (a *application) providerSettingsView(cx *core.Scope, status *core.Signal[s
 					draft = &providerDraft{pref: pref, secrets: secrets}
 					drafts[provider.ID] = draft
 				}
-				return a.providerForm(cx, provider, draft, chat, status, func() { pick(nil) })
+				return enterReveal(cx, 0, 6, a.providerForm(cx, provider, draft, chat, status, func() { pick(nil) }))
 			}
 			if page.directory.Get() {
-				return providerDirectory(page, isAI, pick)
+				return enterReveal(cx, 0, 6, providerDirectory(cx, page, isAI, pick))
 			}
 
-			add := action("添加服务", lucide.Plus(), true, func() {
+			add := action(cx, "添加服务", lucide.Plus(), true, func() {
 				page.search.Set("")
 				page.directory.Set(true)
 				status.Set("")
@@ -73,48 +73,53 @@ func (a *application) providerSettingsView(cx *core.Scope, status *core.Signal[s
 					continue
 				}
 				pref, _ := a.providerSettings(provider.ID)
-				state := "翻译已停用"
+				var badges []core.Node
 				if pref.Translate {
-					state = "已启用翻译"
+					badges = append(badges, pill("已启用翻译", "bg-accent-tint text-accent"))
+				} else {
+					badges = append(badges, pill("翻译已停用", "bg-inset text-text-muted"))
 				}
 				if isAI && chat.Get() == provider.ID {
-					state += " · 当前问答提供商"
+					badges = append(badges, pill("当前问答提供商", "border border-accent-border bg-accent-tint text-accent"))
 				}
-				items = append(items, providerRow(provider.Name, state, func() { pick(provider) }))
+				items = append(items, providerRow(cx, provider.Name, provider.Name, isAI, badges, func() { pick(provider) }))
 			}
 			if len(items) == 0 {
 				hint := "添加免配置来源，即可开始在线翻译。"
+				emptyIcon := lucide.Languages()
 				if isAI {
 					hint = "添加提供商并选择用于问答。"
+					emptyIcon = lucide.Cpu()
 				}
-				items = append(items, box("p-4 gap-1 "+sheet,
-					label("尚未添加服务", "text-base font-semibold "+ink),
-					label(hint, "text-sm "+muted)))
+				items = append(items, box("items-center justify-center gap-2 py-8 px-4 "+cardSubtle,
+					box("size-10 rounded-xl bg-accent-tint items-center justify-center", glyph(emptyIcon, accent)),
+					label("尚未添加服务", "text-sm font-semibold "+ink),
+					label(hint, "text-xs "+muted),
+				))
 			}
-			return box("pb-4 gap-3", box("flex-row justify-end", add), box("gap-2", items...))
+			sectionTitle := "已添加的翻译来源"
+			if isAI {
+				sectionTitle = "已添加的 AI 服务"
+			}
+			return box("pb-4 gap-3",
+				box("flex-row items-center justify-between gap-2",
+					label(sectionTitle, "pl-1 text-xs font-semibold "+muted),
+					add,
+				),
+				box("gap-2", items...),
+			)
 		})
 	}
 }
 
-func providerDirectory(page providerPage, isAI bool, pick func(*service.Provider)) core.Node {
+func providerDirectory(cx *core.Scope, page providerPage, isAI bool, pick func(*service.Provider)) core.Node {
 	var searchField core.Ref
 	return box("gap-3 pb-4",
-		box("flex-row", action("返回服务列表", lucide.ChevronLeft(), false, func() { pick(nil) })),
-		box("flex-row items-center gap-2",
-			glyph(lucide.Search(), muted),
-			ui.Input{
-				Ref: &searchField, Label: "搜索服务", Placeholder: "搜索服务名称", AutoFocus: true,
-				Class: "flex-1", Value: page.search.Get, OnChange: page.search.Set,
-				Style: core.Style{Height: core.Pt(40)},
-			},
-			core.Show{When: func() bool { return page.search.Get() != "" }, Then: func(*core.Scope) core.Node {
-				return iconButton("清除搜索", lucide.X(), func() {
-					page.search.Set("")
-					searchField.Focus()
-				})
-			}},
+		box("flex-row items-center justify-between",
+			compactAction(cx, "返回服务列表", lucide.ChevronLeft(), func() { pick(nil) }),
 		),
-		core.Dynamic(func(*core.Scope) core.Node {
+		searchBar(cx, &searchField, "搜索服务", "搜索服务名称", page.search),
+		core.Dynamic(func(cx *core.Scope) core.Node {
 			query := strings.ToLower(strings.TrimSpace(page.search.Get()))
 			var builtIn, configured []core.Node
 			for i := range service.Providers {
@@ -122,8 +127,12 @@ func providerDirectory(page providerPage, isAI bool, pick func(*service.Provider
 				if provider.AI != isAI || !strings.Contains(strings.ToLower(provider.Name), query) && !strings.Contains(provider.ID, query) {
 					continue
 				}
-				row := providerRow(strings.TrimSuffix(provider.Name, "（内置）"), "", func() { pick(provider) })
-				row.Label = provider.Name
+				title := strings.TrimSuffix(provider.Name, "（内置）")
+				var badges []core.Node
+				if provider.BuiltIn {
+					badges = append(badges, pill("免密钥", "bg-accent-tint text-accent"))
+				}
+				row := providerRow(cx, title, provider.Name, isAI, badges, func() { pick(provider) })
 				if provider.BuiltIn {
 					builtIn = append(builtIn, row)
 				} else {
@@ -131,7 +140,10 @@ func providerDirectory(page providerPage, isAI bool, pick func(*service.Provider
 				}
 			}
 			if len(builtIn) == 0 && len(configured) == 0 {
-				return box("p-4 "+sheet, label("没有匹配的服务", "text-sm "+muted))
+				return box("items-center justify-center gap-1.5 py-8 px-4 "+cardSubtle,
+					glyph(lucide.Search(), faint),
+					label("没有匹配的服务", "text-sm font-medium "+muted),
+				)
 			}
 			if isAI {
 				return box("gap-2", configured...)
@@ -143,7 +155,7 @@ func providerDirectory(page providerPage, isAI bool, pick func(*service.Provider
 			}{{"免配置", builtIn}, {"需配置", configured}} {
 				if len(group.rows) > 0 {
 					groups = append(groups, box("gap-2",
-						label(group.title, "pl-1 text-sm font-semibold "+muted),
+						label(group.title, "pl-1 text-xs font-semibold "+muted),
 						box("gap-2", group.rows...),
 					))
 				}
@@ -153,16 +165,27 @@ func providerDirectory(page providerPage, isAI bool, pick func(*service.Provider
 	)
 }
 
-func providerRow(name, state string, open func()) base.Button {
-	content := []core.Node{label(name, "text-sm font-medium "+ink)}
-	if state != "" {
-		content = append(content, label(state, "text-xs "+muted))
+func providerRow(cx *core.Scope, title, a11yLabel string, isAI bool, badges []core.Node, open func()) base.Button {
+	icon := lucide.Globe()
+	if isAI {
+		icon = lucide.Cpu()
 	}
-	return base.Button{
-		Label: name, OnPress: func(core.PressEvent) { open() },
-		Class:    "min-h-12 px-4 py-3 flex-row items-center gap-3 " + sheet + " " + buttonStates,
-		Children: []core.Node{box("flex-1 min-w-0 gap-1", content...), glyph(lucide.ChevronRight(), muted)},
+	content := []core.Node{label(title, "text-sm font-medium "+ink)}
+	if len(badges) > 0 {
+		content = append(content, box("flex-row flex-wrap items-center gap-1.5", badges...))
 	}
+	b := base.Button{
+		Label:   a11yLabel,
+		OnPress: func(core.PressEvent) { open() },
+		Class:   "min-h-12 px-3.5 py-2.5 flex-row items-center gap-3 " + sheet + " " + buttonStates,
+		Children: []core.Node{
+			box("size-8 rounded-lg bg-accent-tint items-center justify-center shrink-0", glyphSm(icon, accent)),
+			box("flex-1 min-w-0 gap-1", content...),
+			glyphSm(lucide.ChevronRight(), faint),
+		},
+	}
+	b.StyleFunc = func() core.Style { return rowCardMotion(cx) }
+	return b
 }
 
 func (a *application) builtInProviderForm(cx *core.Scope, provider *service.Provider, status *core.Signal[string], back func()) core.Node {
@@ -172,11 +195,17 @@ func (a *application) builtInProviderForm(cx *core.Scope, provider *service.Prov
 		button = "停用翻译"
 	}
 	return box("gap-3 pb-4",
-		box("flex-row", action("返回服务列表", lucide.ChevronLeft(), false, back)),
-		box("p-4 gap-3 "+sheet,
-			label(provider.Name, "text-lg font-semibold "+ink),
+		box("flex-row", compactAction(cx, "返回服务列表", lucide.ChevronLeft(), back)),
+		card(cx, "p-4 gap-3.5",
+			box("flex-row items-center gap-3",
+				box("size-9 rounded-lg bg-accent-tint items-center justify-center", glyph(lucide.Globe(), accent)),
+				box("gap-0.5 flex-1 min-w-0",
+					label(provider.Name, "text-base font-semibold "+ink),
+					label("免配置在线翻译来源", "text-xs "+muted),
+				),
+			),
 			label("无需账号或密钥。启用后，原文会发送给此在线翻译服务。", "text-sm "+muted),
-			box("flex-row", action(button, nil, !pref.Translate, func() {
+			box("flex-row pt-1", action(cx, button, nil, !pref.Translate, func() {
 				if err := a.saveProvider(cx.Secrets(), provider.ID, providerPreference{Translate: !pref.Translate}, nil, false); err != nil {
 					status.Set(err.Error())
 					return
@@ -199,38 +228,62 @@ func (a *application) providerForm(cx *core.Scope, provider *service.Provider, d
 		}
 		status.Set("服务设置已保存")
 	}
-	fields := []core.Node{label(provider.Name, "text-lg font-semibold "+ink)}
+	headerIcon := lucide.Globe()
+	subtitle := "云翻译服务配置"
+	if provider.AI {
+		headerIcon = lucide.Cpu()
+		subtitle = "AI 模型服务配置"
+	}
+	fields := []core.Node{
+		box("flex-row items-center gap-3 pb-2 border-b "+subtleBorder,
+			box("size-9 rounded-lg bg-accent-tint items-center justify-center", glyph(headerIcon, accent)),
+			box("gap-0.5 flex-1 min-w-0",
+				label(provider.Name, "text-base font-semibold "+ink),
+				label(subtitle, "text-xs "+muted),
+			),
+		),
+	}
 	for _, field := range provider.Fields {
 		values := draft.pref.Fields
 		if field.Secret {
 			values = draft.secrets
 		}
-		fields = append(fields, box("gap-1",
-			label(field.Label, "text-sm font-medium "+ink),
+		fields = append(fields, box("gap-1.5",
+			label(field.Label, "text-xs font-semibold "+ink),
 			ui.Input{
-				Style: core.Style{Height: core.Pt(36)},
-				Label: field.Label, DefaultValue: values[field.Key], Masked: field.Secret,
-				OnChange: func(value string) { values[field.Key] = value },
+				Style:        core.Style{Height: core.Pt(36), FontSize: 13},
+				Label:        field.Label,
+				DefaultValue: values[field.Key],
+				Masked:       field.Secret,
+				OnChange:     func(value string) { values[field.Key] = value },
 			},
 		))
 	}
-	fields = append(fields, box("flex-row items-center justify-between gap-2",
-		label("参与在线翻译", "text-sm "+ink),
-		ui.Switch{Label: "参与在线翻译", Size: ui.SizeSmall, Checked: translate.Get, OnChange: func(enabled bool) {
-			draft.pref.Translate = enabled
-			translate.Set(enabled)
-		}},
+	fields = append(fields, box("flex-row items-center justify-between gap-2 pt-3 border-t "+subtleBorder,
+		box("gap-0.5",
+			label("参与在线翻译", "text-sm font-medium "+ink),
+			label("开启后将作为多源翻译之一同时返回译文。", "text-xs "+muted),
+		),
+		ui.Switch{
+			Label:   "参与在线翻译",
+			Size:    ui.SizeSmall,
+			Checked: translate.Get,
+			OnChange: func(enabled bool) {
+				draft.pref.Translate = enabled
+				translate.Set(enabled)
+			},
+		},
 	))
 	return box("gap-3 pb-4",
-		box("flex-row", action("返回服务列表", lucide.ChevronLeft(), false, back)),
-		box("p-4 gap-3 "+sheet, fields...),
+		box("flex-row", compactAction(cx, "返回服务列表", lucide.ChevronLeft(), back)),
+		card(cx, "p-4 gap-3.5", fields...),
 		box("flex-row flex-wrap items-center gap-2",
-			action("保存服务设置", lucide.Check(), true, func() { save(false) }),
-			core.Show{When: func() bool { return provider.AI && chat.Get() != provider.ID }, Then: func(*core.Scope) core.Node {
-				return action("保存并用于问答", nil, false, func() { save(true) })
+			action(cx, "保存服务设置", lucide.Check(), true, func() { save(false) }),
+			core.Show{When: func() bool { return provider.AI && chat.Get() != provider.ID }, Then: func(cx *core.Scope) core.Node {
+				return action(cx, "保存并用于问答", lucide.MessageCircle(), false, func() { save(true) })
 			}},
-			core.Show{When: func() bool { return provider.AI && chat.Get() == provider.ID }, Then: func(*core.Scope) core.Node {
-				return label("当前问答提供商", "text-sm "+muted)
+			core.Show{When: func() bool { return provider.AI && chat.Get() == provider.ID }, Then: func(cx *core.Scope) core.Node {
+				return popReveal(cx, 0, pill("当前问答提供商", "border border-accent-border bg-accent-tint text-accent"))
 			}},
 		),
 	)
