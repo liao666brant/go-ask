@@ -54,6 +54,7 @@ func (a *application) chatResults(cx *core.Scope, follow *core.Signal[bool], cop
 	seenConv := a.conversation
 	seenCount := len(a.messages)
 	wasGenerating := a.generating.GetUntracked()
+	laidOut := false
 	cx.Effect(func() {
 		a.messagesVersion.Get()
 		a.partial.Get()
@@ -61,7 +62,7 @@ func (a *application) chatResults(cx *core.Scope, follow *core.Signal[bool], cop
 			conversation = a.conversation
 			follow.Set(true)
 		}
-		if follow.Get() {
+		if follow.Get() && laidOut {
 			cx.Post(func() {
 				if follow.Get() {
 					scroll.ScrollToEnd(false)
@@ -73,10 +74,22 @@ func (a *application) chatResults(cx *core.Scope, follow *core.Signal[bool], cop
 		Label: "会话消息",
 		Class: "flex-1",
 		Ref:   &scroll,
-		OnScroll: func(event core.ScrollEvent) {
-			if !event.Stale {
-				follow.Set(event.ContentSize.Height-event.Size.Height-event.Offset.Y <= 24)
+		OnLayout: func(b core.Bounds) {
+			if b.Size.Height <= 0 {
+				return
 			}
+			if !laidOut {
+				laidOut = true
+				if follow.GetUntracked() {
+					scroll.ScrollToEnd(false)
+				}
+			}
+		},
+		OnScroll: func(event core.ScrollEvent) {
+			if event.Stale || !laidOut {
+				return
+			}
+			follow.Set(event.ContentSize.Height-event.Size.Height-event.Offset.Y <= 24)
 		},
 		Children: []core.Node{core.Dynamic(func(cx *core.Scope) core.Node {
 			a.messagesVersion.Get()

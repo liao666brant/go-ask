@@ -76,7 +76,11 @@ func TestChatScrollLetsUsersReadEarlierMessages(t *testing.T) {
 	if panel.Find(scroll).Offset.Y == 0 || panel.Exists(jump) {
 		t.Fatal("jump should reveal the latest message and resume following")
 	}
+	// A streaming update that does not change scroll height must not block scrolling up.
+	panel.Post(func() { a.partial.Set(a.partial.GetUntracked() + "。") })
+	panel.Settle()
 	panel.ScrollTo(scroll, core.Point{})
+	panel.Find(jump)
 	panel.Press("label:复制回答")
 	panel.Find("text:已复制")
 	if panel.Clipboard != answer {

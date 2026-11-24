@@ -51,4 +51,4 @@ python3 tools/package.py
 
 发布脚本为两个平台写入相同的 NSGo 应用 ID，启用后台单实例唤回。Linux 压缩包和 Windows ZIP 生成在 `dist/` 下，均含运行文件和依赖许可。开发启动可运行 `go run -ldflags="-X github.com/nsgo-dev/nsgo/core.appID=dev.goask.GoAsk" .`。
 
-翻译交互参考 [STranslate](https://github.com/STranslate/STranslate)，原生界面使用 [NSGo v0.2.0](https://github.com/nsgo-dev/nsgo/releases/tag/v0.2.0)。词库数据取自 [ECDICT 固定版本](https://github.com/skywind3000/ECDICT/tree/39cfb9672c0906b63569e0453c2e6abfb9ab182a)。
+翻译交互参考 [STranslate](https://github.com/STranslate/STranslate)，原生界面使用 [NSGo v0.3.0](https://github.com/nsgo-dev/nsgo/releases/tag/v0.3.0)。词库数据取自 [ECDICT 固定版本](https://github.com/skywind3000/ECDICT/tree/39cfb9672c0906b63569e0453c2e6abfb9ab182a)。
