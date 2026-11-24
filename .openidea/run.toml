@@ -18,3 +18,10 @@ args = [
     "-o", "go-ask.exe", ".",
 ]
 env = { GOOS = "windows", GOARCH = "amd64", CGO_ENABLED = "0" }
+
+[[configurations]]
+id = "user:package-go-ask"
+name = "打包 Go Ask（Windows & Linux）"
+kind = "program"
+command = "python3"
+args = ["tools/package.py"]
