@@ -183,3 +183,31 @@ func TestDictionaryComparisonUsesDisplayedWord(t *testing.T) {
 		t.Fatalf("unexpected comparison request: %+v", request)
 	}
 }
+
+func TestSwapLanguagesAndClearQuery(t *testing.T) {
+	db, err := data.Open(filepath.Join(t.TempDir(), "history.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	a := &application{db: db}
+	a.host = &desktopHost{app: a}
+	panel := nsgotest.Start(t, a.root, nsgotest.Size(panelWidth, panelMaxHeight))
+
+	// Chinese input under auto->smart infers zh->en, so swapping must reverse it to en->zh.
+	panel.Type("role:textbox", "你好")
+	panel.Find("text:译为英语")
+	panel.Press("label:交换语言")
+	if a.source.GetUntracked() != "en" || a.target.GetUntracked() != "zh" {
+		t.Fatalf("swapping Chinese smart input expected en->zh, got %s->%s", a.source.GetUntracked(), a.target.GetUntracked())
+	}
+	panel.Press("label:交换语言")
+	if a.source.GetUntracked() != "zh" || a.target.GetUntracked() != "en" {
+		t.Fatalf("swapping explicit languages expected zh->en, got %s->%s", a.source.GetUntracked(), a.target.GetUntracked())
+	}
+
+	panel.Press("label:清空原文")
+	if a.query.GetUntracked() != "" || panel.Exists("label:清空原文") {
+		t.Fatalf("clearing query did not reset draft: %q", a.query.GetUntracked())
+	}
+}

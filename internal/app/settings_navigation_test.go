@@ -91,8 +91,9 @@ func TestSettingsProviderDirectoryAndDrafts(t *testing.T) {
 	settings.Press("label:参与在线翻译")
 	settings.Press("label:返回服务列表")
 	settings.Press("label:添加服务")
-	settings.Type("label:搜索服务", "mtran")
-	settings.Press("label:MTranServer")
+	settings.Find("id:provider-directory-modal")
+	settings.Type("id:provider-directory-modal >> label:搜索服务", "mtran")
+	settings.Press("id:provider-directory-modal >> label:MTranServer")
 	settings.Find("text:http://127.0.0.1:18989")
 
 	settings.Press("label:AI 提供商")
@@ -121,8 +122,10 @@ func TestSettingsProviderDirectoryAndDrafts(t *testing.T) {
 	settings.Press("label:返回服务列表")
 	settings.Find("text:已启用翻译")
 	settings.Press("label:添加服务")
-	settings.Type("label:搜索服务", "mtran")
-	settings.Press("label:MTranServer")
+	settings.Find("id:provider-directory-modal")
+	settings.Type("id:provider-directory-modal >> label:搜索服务", "mtran")
+	settings.Find("id:provider-directory-modal >> text:已添加")
+	settings.Press("id:provider-directory-modal >> label:MTranServer")
 	settings.Find("text:http://127.0.0.1:18989")
 	settings.Press("label:返回服务列表")
 	settings.Find("label:MTranServer")
@@ -155,10 +158,10 @@ func TestSettingsBuiltInProviderCanBeEnabledWithoutCredentials(t *testing.T) {
 	a, settings := openSettingsFixture(t)
 	settings.Press("label:翻译服务")
 	settings.Press("label:添加服务")
-	settings.Type("label:搜索服务", "谷歌")
-	settings.Find("text:免配置")
-	settings.Find("label:谷歌 Google Cloud Translation")
-	settings.Press("label:谷歌翻译（内置）")
+	settings.Type("id:provider-directory-modal >> label:搜索服务", "谷歌")
+	settings.Find("id:provider-directory-modal >> text:免配置")
+	settings.Find("id:provider-directory-modal >> label:谷歌 Google Cloud Translation")
+	settings.Press("id:provider-directory-modal >> label:谷歌翻译（内置）")
 	if a.hasProvider(service.GoogleBuiltIn) || settings.Exists("label:API Key") {
 		t.Fatal("selecting a built-in provider should open its credentialless form without enabling it")
 	}
@@ -176,5 +179,35 @@ func TestSettingsBuiltInProviderCanBeEnabledWithoutCredentials(t *testing.T) {
 	pref, err = loadPreferences(a.configPath)
 	if err != nil || pref.Providers[service.GoogleBuiltIn].Translate {
 		t.Fatalf("disabling the built-in provider did not persist: %v", err)
+	}
+}
+
+func TestSettingsProviderDirectoryModalDismissal(t *testing.T) {
+	_, settings := openSettingsFixture(t)
+	settings.Press("label:翻译服务")
+	settings.Press("label:添加服务")
+	settings.Find("id:provider-directory-modal")
+	settings.Find("id:provider-directory-modal >> text:添加翻译服务")
+
+	// Pressing Escape closes the modal without closing the settings window.
+	settings.Key("escape")
+	if settings.Exists("id:provider-directory-modal") {
+		t.Fatal("escape did not dismiss the provider directory modal")
+	}
+	settings.Find("label:添加服务")
+
+	// Cancel and close buttons dismiss the modal cleanly on both tabs.
+	settings.Press("label:添加服务")
+	settings.Press("id:provider-directory-modal >> label:取消")
+	if settings.Exists("id:provider-directory-modal") {
+		t.Fatal("cancel button did not dismiss the provider directory modal")
+	}
+
+	settings.Press("label:AI 提供商")
+	settings.Press("label:添加服务")
+	settings.Find("id:provider-directory-modal >> text:添加 AI 提供商")
+	settings.Press("id:provider-directory-modal >> label:关闭弹窗")
+	if settings.Exists("id:provider-directory-modal") {
+		t.Fatal("close button did not dismiss the AI provider directory modal")
 	}
 }

@@ -92,7 +92,8 @@ func TestTranslationPanelFitsShortAndLongResults(t *testing.T) {
 		a.resultsVersion.Update(increment)
 	})
 	shortHeight := height()
-	if emptyHeight <= 0 || shortHeight <= emptyHeight || shortHeight >= panelMaxHeight {
+	maxPanelHeight := core.Points(panelMaxHeight + panelShadowVertical)
+	if emptyHeight <= 0 || shortHeight <= emptyHeight || shortHeight >= maxPanelHeight {
 		t.Fatalf("empty and short panels should fit their content: %v, %v", emptyHeight, shortHeight)
 	}
 	run(func() {
@@ -100,7 +101,7 @@ func TestTranslationPanelFitsShortAndLongResults(t *testing.T) {
 		a.resultsVersion.Update(increment)
 	})
 	longHeight := height()
-	if longHeight <= shortHeight || longHeight > panelMaxHeight {
+	if longHeight <= shortHeight || longHeight > maxPanelHeight {
 		t.Fatalf("long results should grow within the panel limit, got %v", longHeight)
 	}
 	layout := &application{db: db}
@@ -150,6 +151,35 @@ func TestTranslationPanelFitsShortAndLongResults(t *testing.T) {
 	run(a.clearTranslation)
 	if got := height(); got != emptyHeight {
 		t.Fatalf("clearing the results should restore the empty height %v, got %v", emptyHeight, got)
+	}
+}
+
+func TestTransparentPanelFitsWithoutClipping(t *testing.T) {
+	db, err := data.Open(filepath.Join(t.TempDir(), "history.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	a := &application{db: db}
+	a.host = &desktopHost{app: a}
+	env := core.Environment{OS: core.OSWindows, Idiom: core.IdiomDesktop, WindowTransparent: true}
+	panelW := core.Points(panelWidth + panelShadowHorizontal)
+	panelH := core.Points(panelMaxHeight + panelShadowVertical)
+	panel := nsgotest.Start(t, a.root, nsgotest.Size(panelW, panelH), nsgotest.Environment(env))
+	panel.Post(func() {
+		a.translations = []translation{
+			{provider: service.DeepL, value: strings.Repeat("透明悬浮卡片下的长译文验证。\n", 40)},
+		}
+		a.resultsVersion.Update(increment)
+	})
+	panel.Settle()
+	maxBottom := core.Points(panelMaxHeight + panelShadowTop)
+	if esc := panel.Find("text:Esc").Bounds(); esc.Origin.Y+esc.Size.Height > maxBottom {
+		t.Fatalf("translation hints clipped in transparent panel: %v > %v", esc.Origin.Y+esc.Size.Height, maxBottom)
+	}
+	panel.Key("ctrl+tab")
+	if esc := panel.Find("text:Esc").Bounds(); esc.Origin.Y+esc.Size.Height > maxBottom {
+		t.Fatalf("chat hints clipped in transparent panel: %v > %v", esc.Origin.Y+esc.Size.Height, maxBottom)
 	}
 }
 

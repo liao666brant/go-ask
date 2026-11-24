@@ -31,7 +31,7 @@ func cardShadow(cx *core.Scope) core.Style {
 			Shadows: []core.BoxShadow{{
 				Offset: core.Point{Y: 2},
 				Blur:   8,
-				Color:  core.RGBA(0x000000, 0.28),
+				Color:  core.RGBA(0x000000, 0.30),
 			}},
 		}
 	}
@@ -39,12 +39,98 @@ func cardShadow(cx *core.Scope) core.Style {
 		BorderCurve: core.BorderCurveContinuous,
 		Shadows: []core.BoxShadow{{
 			Offset: core.Point{Y: 1},
-			Blur:   3,
+			Blur:   2,
 			Color:  core.RGBA(0x161918, 0.05),
 		}, {
 			Offset: core.Point{Y: 4},
 			Blur:   12,
 			Color:  core.RGBA(0x161918, 0.04),
+		}},
+	}
+}
+
+// focusCardStyle elevates a composer or search card and highlights its rim while focused.
+func focusCardStyle(cx *core.Scope) core.Style {
+	colors := ui.ColorsOf(cx)
+	s := cardShadow(cx)
+	s.Transition = colorTransition
+	ringColor := colors.Accent().Faded(0.16)
+	if cx.Dark() {
+		ringColor = colors.Accent().Faded(0.24)
+	}
+	s.FocusWithin = &core.Style{
+		BorderColor: colors.Accent(),
+		Shadows: []core.BoxShadow{{
+			Spread: 3,
+			Color:  ringColor,
+		}},
+	}
+	return s
+}
+
+// primaryCTAStyle adds subtle tactile depth to the primary accent button when enabled.
+func primaryCTAStyle(cx *core.Scope) core.Style {
+	colors := ui.ColorsOf(cx)
+	shadowAlpha := float32(0.18)
+	if cx.Dark() {
+		shadowAlpha = 0.24
+	}
+	return core.Style{
+		BorderCurve: core.BorderCurveContinuous,
+		Shadows: []core.BoxShadow{{
+			Offset: core.Point{Y: 1},
+			Blur:   3,
+			Color:  colors.Accent().Faded(shadowAlpha),
+		}},
+		Disabled: &core.Style{
+			Shadows: []core.BoxShadow{},
+		},
+	}
+}
+
+// floatingPanelStyle frames the transparent desktop launcher as a crisp rounded floating card.
+// Blur and vertical offset are kept strictly within panelShadowEdges so the window boundary never clips the shadow.
+func floatingPanelStyle(cx *core.Scope, transparent bool) core.Style {
+	colors := ui.ColorsOf(cx)
+	if !transparent {
+		return core.Style{
+			Background:  colors.Background(),
+			BorderWidth: 1,
+			BorderColor: colors.Border(),
+		}
+	}
+	if cx.Dark() {
+		return core.Style{
+			Background:   colors.Background(),
+			CornerRadius: 16,
+			BorderCurve:  core.BorderCurveContinuous,
+			BorderWidth:  1,
+			BorderColor:  ui.Mix(colors.Border(), colors.Text(), 0.10),
+			Shadows: []core.BoxShadow{{
+				Offset: core.Point{Y: 4},
+				Blur:   12,
+				Color:  core.RGBA(0x000000, 0.38),
+			}, {
+				Offset: core.Point{Y: 1},
+				Blur:   4,
+				Color:  core.RGBA(0x000000, 0.24),
+			}},
+		}
+	}
+	return core.Style{
+		Background:   colors.Background(),
+		CornerRadius: 16,
+		BorderCurve:  core.BorderCurveContinuous,
+		BorderWidth:  1,
+		BorderColor:  ui.Mix(colors.Border(), colors.Text(), 0.08),
+		Shadows: []core.BoxShadow{{
+			Offset: core.Point{Y: 4},
+			Blur:   12,
+			Color:  core.RGBA(0x161918, 0.10),
+		}, {
+			Offset: core.Point{Y: 1},
+			Blur:   4,
+			Color:  core.RGBA(0x161918, 0.06),
 		}},
 	}
 }
@@ -145,15 +231,20 @@ var workbenchTheme = func() *core.Theme {
 		warnTint := ui.Mix(p.Surface, p.Warning, 0.09)
 		warnBorder := ui.Mix(p.Surface, p.Warning, 0.28)
 		accentBorder := ui.Mix(p.Surface, p.Accent, 0.24)
-		codeBg := core.RGB(spec.inset)
-		codeHeader := ui.Mix(codeBg, p.Border, 0.35)
 		if spec.dark {
 			warnTint = ui.Mix(p.Surface, p.Warning, 0.13)
 			warnBorder = ui.Mix(p.Surface, p.Warning, 0.32)
 			accentBorder = ui.Mix(p.Surface, p.Accent, 0.30)
-			codeBg = core.RGB(0x141716)
-			codeHeader = core.RGB(0x1c201e)
 		}
+
+		// Code blocks use a dedicated deep obsidian terminal surface in both themes for crisp contrast.
+		codeBg := core.RGB(0x141918)
+		codeHeader := core.RGB(0x1c2321)
+		codeBorder := core.RGB(0x2a3330)
+		codeInk := core.RGB(0xe9f1ee)
+		codeMuted := core.RGB(0x8fa39d)
+		codeHover := core.RGB(0x27312e)
+		codeAccent := core.RGB(0x38c6b4)
 
 		for name, color := range map[string]core.Color{
 			"inset":          core.RGB(spec.inset),
@@ -163,9 +254,14 @@ var workbenchTheme = func() *core.Theme {
 			"fieldBorder":    p.Border,
 			"line":           core.RGB(spec.line),
 			"faint":          core.RGB(spec.faint),
-			"code":           p.Text,
+			"code":           codeInk,
 			"code-bg":        codeBg,
 			"code-header":    codeHeader,
+			"code-border":    codeBorder,
+			"code-ink":       codeInk,
+			"code-muted":     codeMuted,
+			"code-hover":     codeHover,
+			"code-accent":    codeAccent,
 			"accent-tint":    p.Selection,
 			"accent-border":  accentBorder,
 			"accentFill":     p.Accent,

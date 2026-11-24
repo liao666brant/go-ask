@@ -184,6 +184,15 @@ func presencePop(when func() bool, then func(*core.Scope) core.Node) core.Node {
 
 // copyIconButton morphs its icon to an animated check mark in place after copying.
 func copyIconButton(cx *core.Scope, name string, onCopy func()) core.Node {
+	return copyButtonStyled(cx, name, "size-7 items-center justify-center rounded-md text-text-muted "+buttonStates, "", accent, onCopy)
+}
+
+// codeCopyButton is a compact copy action styled for the dark obsidian code block header.
+func codeCopyButton(cx *core.Scope, name string, onCopy func()) core.Node {
+	return copyButtonStyled(cx, name, "h-6 px-2 flex-row gap-1 items-center justify-center rounded-md text-code-muted enabled:hover:bg-code-hover "+focusRing, "text-code-muted", "text-code-accent", onCopy)
+}
+
+func copyButtonStyled(cx *core.Scope, name, class, copyTone, checkTone string, onCopy func()) core.Node {
 	done := core.NewSignal(cx, false)
 	var stop func() bool
 	trigger := func() {
@@ -197,15 +206,15 @@ func copyIconButton(cx *core.Scope, name string, onCopy func()) core.Node {
 	return base.Button{
 		Label:   name,
 		Tooltip: label(name, "text-xs"),
-		Class:   "size-7 items-center justify-center rounded-md text-text-muted " + buttonStates,
+		Class:   class,
 		Style:   buttonMotion(cx, 0.90),
 		OnPress: func(core.PressEvent) { trigger() },
 		Children: []core.Node{
 			core.Dynamic(func(cx *core.Scope) core.Node {
 				if done.Get() {
-					return popReveal(cx, 0, glyphSm(lucide.Check(), accent))
+					return popReveal(cx, 0, glyphSm(lucide.Check(), checkTone))
 				}
-				return glyphSm(lucide.Copy(), "")
+				return glyphSm(lucide.Copy(), copyTone)
 			}),
 		},
 	}

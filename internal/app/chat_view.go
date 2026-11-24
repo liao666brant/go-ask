@@ -21,7 +21,7 @@ func (a *application) chatWorkspace(cx *core.Scope) core.Node {
 	}
 	sendButton := action(cx, "发送", lucide.SendHorizontal(), true, send)
 	sendButton.Disabled = func() bool { return strings.TrimSpace(a.question.Get()) == "" }
-	composer := card(cx, "z-10 overflow-hidden",
+	composer := focusCard(cx, "z-10 overflow-hidden",
 		a.composerInput(cx, "问答输入", a.question, "有什么想问的？", 68, send),
 		box("flex-row items-center gap-2 px-3 py-2 bg-surface-subtle border-t "+subtleBorder,
 			compactAction(cx, "新话题", lucide.Plus(), a.newConversation),
@@ -107,7 +107,7 @@ func (a *application) chatResults(cx *core.Scope, follow *core.Signal[bool], cop
 			for i, m := range a.messages {
 				var msgNode core.Node
 				if m.Role == "user" {
-					msgNode = box("self-end max-w-[82%] px-4 py-2.5 rounded-2xl border border-accent-border bg-accent-tint",
+					bubble := box("self-end max-w-[82%] px-4 py-2.5 border border-accent-border bg-accent-tint",
 						core.Text{
 							Content:    m.Content,
 							Selectable: core.SelectableOn,
@@ -115,6 +115,11 @@ func (a *application) chatResults(cx *core.Scope, follow *core.Signal[bool], cop
 							Style:      core.Style{LineHeight: 23},
 						},
 					)
+					bubble.Style = core.Style{
+						CornerRadii: core.Corners{TopLeft: 16, TopRight: 16, BottomLeft: 16, BottomRight: 5},
+						BorderCurve: core.BorderCurveContinuous,
+					}
+					msgNode = bubble
 				} else {
 					msgNode = answer(cx, m.Content, i > 0, copyText)
 				}
@@ -154,14 +159,39 @@ func (a *application) chatResults(cx *core.Scope, follow *core.Signal[bool], cop
 				)))
 			}
 			if len(nodes) == 0 {
-				nodes = append(nodes, box("items-center justify-center gap-3 py-10 px-6",
-					box("size-12 rounded-2xl border border-accent-border bg-accent-tint items-center justify-center",
-						glyph(lucide.Terminal(), accent),
+				starters := [][2]string{
+					{"解释这段代码", "请解释这段代码的作用和关键细节：\n"},
+					{"润色为地道英文", "请将以下内容润色为自然地道的英文：\n"},
+					{"提炼核心要点", "请用简洁的要点总结以下内容：\n"},
+				}
+				var chips []core.Node
+				for _, item := range starters {
+					title, prompt := item[0], item[1]
+					chips = append(chips, base.Button{
+						Label: title,
+						Class: "flex-row items-center gap-1.5 h-8 px-3 rounded-full border bg-surface-subtle " + subtleBorder + " " + buttonStates,
+						Style: buttonMotion(cx, 0.96),
+						OnPress: func(core.PressEvent) {
+							a.question.Set(prompt)
+							a.focusEditor()
+						},
+						Children: []core.Node{
+							glyphSm(lucide.ArrowUpRight(), accent),
+							label(title, "text-xs font-medium "+ink),
+						},
+					})
+				}
+				nodes = append(nodes, box("items-center justify-center gap-4 py-8 px-6",
+					box("p-1.5 rounded-2xl border border-accent-border bg-accent-tint",
+						box("size-10 rounded-xl bg-accent items-center justify-center",
+							glyph(lucide.Terminal(), "text-accent-text"),
+						),
 					),
 					box("items-center gap-1",
 						label("开始一段问答", "text-lg font-semibold "+ink),
 						label("直接输入问题，或在翻译结果中点击「就此提问」追问上下文。", "text-sm "+muted),
 					),
+					box("flex-row flex-wrap items-center justify-center gap-2", chips...),
 				))
 			}
 			return box("gap-4 pl-5 pr-5 py-4", nodes...)
@@ -200,17 +230,18 @@ func answer(cx *core.Scope, text string, separated bool, copyText func(string)) 
 		if caption == "" {
 			caption = "代码"
 		}
-		rows = append(rows, box("ml-8 rounded-lg border overflow-hidden bg-code-bg "+subtleBorder,
-			box("flex-row items-center px-3 py-1.5 bg-code-header border-b "+subtleBorder,
-				label(caption, "font-mono text-xs font-medium "+muted),
+		rows = append(rows, box("ml-8 rounded-xl border border-code-border overflow-hidden bg-code-bg",
+			box("flex-row items-center gap-2 px-3.5 py-2 bg-code-header border-b border-code-border",
+				glyphSm(lucide.Terminal(), "text-code-muted"),
+				label(caption, "font-mono text-xs font-medium text-code-muted"),
 				box("flex-1"),
-				copyIconButton(cx, "复制代码", func() { copyText(s) }),
+				codeCopyButton(cx, "复制代码", func() { copyText(s) }),
 			),
-			box("px-3.5 py-2.5",
+			box("px-3.5 py-3",
 				core.Text{
 					Content: s,
-					Class:   "font-mono text-xs " + ink,
-					Style:   core.Style{LineHeight: 19},
+					Class:   "font-mono text-xs text-code-ink",
+					Style:   core.Style{LineHeight: 20},
 				},
 			),
 		))

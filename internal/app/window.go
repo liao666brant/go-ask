@@ -16,8 +16,21 @@ import (
 const (
 	panelWidth               = 760
 	panelMaxHeight           = 558
+	panelShadowTop           = 18
+	panelShadowSide          = 22
+	panelShadowBottom        = 26
+	panelShadowHorizontal    = 2 * panelShadowSide
+	panelShadowVertical      = panelShadowTop + panelShadowBottom
+	panelBorderWidth         = 1
 	translationResultsHeight = 276
 )
+
+var panelShadowEdges = core.Edges{
+	Top:    panelShadowTop,
+	Right:  panelShadowSide,
+	Bottom: panelShadowBottom,
+	Left:   panelShadowSide,
+}
 
 func label(s, class string) core.Node { return core.Text{Content: s, Class: class} }
 func box(class string, children ...core.Node) core.View {
@@ -26,6 +39,11 @@ func box(class string, children ...core.Node) core.View {
 func card(cx *core.Scope, class string, children ...core.Node) core.View {
 	v := core.View{Class: class + " " + sheet, Children: children}
 	v.StyleFunc = func() core.Style { return cardShadow(cx) }
+	return v
+}
+func focusCard(cx *core.Scope, class string, children ...core.Node) core.View {
+	v := core.View{Class: class + " " + sheet, Children: children}
+	v.StyleFunc = func() core.Style { return focusCardStyle(cx) }
 	return v
 }
 func glyph(svg *core.SVG, class string) core.Node {
@@ -49,13 +67,17 @@ func action(cx *core.Scope, name string, svg *core.SVG, primary bool, fn func())
 		content = append(content, glyphSm(svg, fg))
 	}
 	content = append(content, label(name, "text-sm font-medium "+fg))
-	return base.Button{
+	b := base.Button{
 		Label:    name,
 		Class:    "flex-row gap-1.5 px-3.5 h-9 rounded-lg items-center justify-center disabled:opacity-45 " + bg,
 		Style:    buttonMotion(cx, 0.975),
 		OnPress:  func(core.PressEvent) { fn() },
 		Children: content,
 	}
+	if primary {
+		b.StyleFunc = func() core.Style { return primaryCTAStyle(cx) }
+	}
+	return b
 }
 
 func compactAction(cx *core.Scope, name string, svg *core.SVG, fn func()) base.Button {
@@ -130,13 +152,29 @@ func modeButton(cx *core.Scope, name string, icon *core.SVG, selected func() boo
 	}
 }
 
-func brandMark() core.Node {
-	return box("size-7 rounded-lg items-center justify-center bg-accent", glyphSm(lucide.Terminal(), "text-accent-text"))
+func brandMark(cx *core.Scope) core.Node {
+	colors := ui.ColorsOf(cx)
+	v := box("size-7 rounded-lg items-center justify-center bg-accent", glyphSm(lucide.Terminal(), "text-accent-text"))
+	v.StyleFunc = func() core.Style {
+		alpha := float32(0.28)
+		if cx.Dark() {
+			alpha = 0.32
+		}
+		return core.Style{
+			BorderCurve: core.BorderCurveContinuous,
+			Shadows: []core.BoxShadow{{
+				Offset: core.Point{Y: 1},
+				Blur:   3,
+				Color:  colors.Accent().Faded(alpha),
+			}},
+		}
+	}
+	return v
 }
 
 func searchBar(cx *core.Scope, ref *core.Ref, fieldLabel, placeholder string, value *core.Signal[string]) core.Node {
 	colors := ui.ColorsOf(cx)
-	return card(cx, "flex-row items-center px-3 py-1 gap-2",
+	return focusCard(cx, "flex-row items-center px-3 py-1 gap-2",
 		glyphSm(lucide.Search(), faint),
 		ui.Input{
 			Ref:         ref,
@@ -206,91 +244,112 @@ func (a *application) root(cx *core.Scope) core.Node {
 	// The panel can hide before its backend sees key-up. Accept the next Escape
 	// even if that backend still classifies it as a repeat.
 	cx.OnKeyWith("escape", core.KeyOptions{When: core.KeyAlways, Repeat: true}, func() { a.host.hide() })
-	window := box("bg-background", core.Dynamic(func(cx *core.Scope) core.Node {
-		page, mode := a.page.Get(), a.mode.Get()
-		header := box("flex-row items-center gap-1.5 px-4 py-2.5 bg-surface border-b "+divider,
-			brandMark(),
-			label("Go Ask", "ml-1.5 mr-4 font-semibold text-base "+ink),
-		)
-		if page == "work" {
-			header.Children = append(header.Children,
-				box("flex-row items-center gap-0.5 p-1 rounded-lg bg-inset border "+subtleBorder,
-					modeButton(cx, "翻译", lucide.Languages(), func() bool { return a.mode.Get() == "translate" }, func() { a.switchMode("translate") }),
-					modeButton(cx, "问答", lucide.MessageCircle(), func() bool { return a.mode.Get() == "chat" }, func() { a.switchMode("chat") }),
-				),
-			)
-		} else {
-			back := compactAction(cx, "返回", lucide.ChevronLeft(), func() { a.switchMode(a.mode.Get()) })
-			header.Children = append(header.Children,
-				back,
-				label("历史会话", "ml-2 text-sm font-semibold "+ink),
-			)
-		}
-		header.Children = append(header.Children, core.View{Class: "flex-1 h-8", Desktop: core.DesktopViewProps{WindowDrag: core.WindowDragOn}})
-		if page == "work" {
-			header.Children = append(header.Children,
-				iconButton(cx, "历史会话", lucide.Clock3(), func() {
-					a.note.Set("")
-					a.page.Set("history")
-				}),
-				iconButton(cx, "设置", lucide.Settings2(), a.host.openSettings),
-				box("mx-1 h-4 w-px bg-border"),
-			)
-		}
-		pinIcon := core.Icon{
-			SVG:   lucide.Pin(),
-			Class: "size-4",
-			StyleFunc: func() core.Style {
-				if ui.ReduceMotion(cx) {
-					return core.Style{}
-				}
-				deg := float32(0)
-				if pinned.Get() {
-					deg = -22
-				}
+	window := core.View{
+		StyleFunc: func() core.Style {
+			if desktop.Transparent(cx) {
 				return core.Style{
-					Transforms: rotateSteps(deg),
-					Transition: core.Transition{
-						Duration:   motionNormal,
-						Easing:     core.EaseOut,
-						Properties: core.TransitionTransform,
+					Width:   core.Pt(panelWidth + panelShadowHorizontal),
+					Padding: panelShadowEdges,
+				}
+			}
+			return core.Style{Width: core.Pt(panelWidth)}
+		},
+		Children: []core.Node{
+			core.Dynamic(func(cx *core.Scope) core.Node {
+				page, mode := a.page.Get(), a.mode.Get()
+				transparent := desktop.Transparent(cx)
+				header := box("flex-row items-center gap-1.5 px-4 py-2.5 bg-surface border-b "+divider,
+					brandMark(cx),
+					label("Go Ask", "ml-1.5 mr-4 font-semibold text-base "+ink),
+				)
+				if page == "work" {
+					header.Children = append(header.Children,
+						box("flex-row items-center gap-0.5 p-1 rounded-lg bg-inset border "+subtleBorder,
+							modeButton(cx, "翻译", lucide.Languages(), func() bool { return a.mode.Get() == "translate" }, func() { a.switchMode("translate") }),
+							modeButton(cx, "问答", lucide.MessageCircle(), func() bool { return a.mode.Get() == "chat" }, func() { a.switchMode("chat") }),
+						),
+					)
+				} else {
+					back := compactAction(cx, "返回", lucide.ChevronLeft(), func() { a.switchMode(a.mode.Get()) })
+					header.Children = append(header.Children,
+						back,
+						label("历史会话", "ml-2 text-sm font-semibold "+ink),
+					)
+				}
+				header.Children = append(header.Children, core.View{Class: "flex-1 h-8", Desktop: core.DesktopViewProps{WindowDrag: core.WindowDragOn}})
+				if page == "work" {
+					header.Children = append(header.Children,
+						iconButton(cx, "历史会话", lucide.Clock3(), func() {
+							a.note.Set("")
+							a.page.Set("history")
+						}),
+						iconButton(cx, "设置", lucide.Settings2(), a.host.openSettings),
+						box("mx-1 h-4 w-px bg-border"),
+					)
+				}
+				pinIcon := core.Icon{
+					SVG:   lucide.Pin(),
+					Class: "size-4",
+					StyleFunc: func() core.Style {
+						if ui.ReduceMotion(cx) {
+							return core.Style{}
+						}
+						deg := float32(0)
+						if pinned.Get() {
+							deg = -22
+						}
+						return core.Style{
+							Transforms: rotateSteps(deg),
+							Transition: core.Transition{
+								Duration:   motionNormal,
+								Easing:     core.EaseOut,
+								Properties: core.TransitionTransform,
+							},
+						}
 					},
 				}
-			},
-		}
-		header.Children = append(header.Children,
-			core.Show{When: func() bool { return !canPin() }, Then: func(*core.Scope) core.Node {
-				return label(pinUnavailable, "mr-1 text-xs "+muted)
-			}},
-			base.Button{
-				LabelFunc: pinLabel,
-				Tooltip:   core.Text{Class: "text-xs", ContentFunc: pinLabel},
-				Disabled:  func() bool { return !canPin() },
-				Selected:  pinned.Get,
-				Class:     "size-8 items-center justify-center rounded-lg text-text-muted disabled:opacity-45 " + buttonStates + " " + selectedFill + " aria-selected:text-accent",
-				Style:     buttonMotion(cx, 0.92),
-				OnPress:   func(core.PressEvent) { a.host.togglePanelPin() },
-				Children:  []core.Node{pinIcon},
-			},
-			iconButton(cx, "收起窗口", lucide.Minus(), a.host.hide),
-		)
-		var body core.Node
-		switch {
-		case page == "history":
-			body = enterReveal(cx, 0, 6, a.historyView(cx))
-		case mode == "chat":
-			body = enterRevealFlex(cx, 6, a.chatWorkspace(cx))
-		default:
-			body = enterReveal(cx, 0, 6, a.translationWorkspace(cx))
-		}
-		panel := box("shrink", header, body)
-		if page == "work" && mode == "chat" {
-			// Keep the composer in one place as a streamed reply grows.
-			panel.Style.Height = core.Pt(panelMaxHeight)
-		}
-		return panel
-	}))
-	window.Style.Width = core.Pt(panelWidth)
+				header.Children = append(header.Children,
+					core.Show{When: func() bool { return !canPin() }, Then: func(*core.Scope) core.Node {
+						return label(pinUnavailable, "mr-1 text-xs "+muted)
+					}},
+					base.Button{
+						LabelFunc: pinLabel,
+						Tooltip:   core.Text{Class: "text-xs", ContentFunc: pinLabel},
+						Disabled:  func() bool { return !canPin() },
+						Selected:  pinned.Get,
+						Class:     "size-8 items-center justify-center rounded-lg text-text-muted disabled:opacity-45 " + buttonStates + " " + selectedFill + " aria-selected:text-accent",
+						Style:     buttonMotion(cx, 0.92),
+						OnPress:   func(core.PressEvent) { a.host.togglePanelPin() },
+						Children:  []core.Node{pinIcon},
+					},
+					iconButton(cx, "收起窗口", lucide.Minus(), a.host.hide),
+				)
+				var body core.Node
+				switch {
+				case page == "history":
+					body = enterReveal(cx, 0, 6, a.historyView(cx))
+				case mode == "chat":
+					body = enterRevealFlex(cx, 6, a.chatWorkspace(cx))
+				default:
+					body = enterReveal(cx, 0, 6, a.translationWorkspace(cx))
+				}
+				inner := box("shrink overflow-hidden", header, body)
+				if transparent {
+					inner.Style.CornerRadius = 15
+					inner.Style.BorderCurve = core.BorderCurveContinuous
+				}
+				if page == "work" && mode == "chat" {
+					// Keep the composer in one place as a streamed reply grows.
+					inner.Style.Height = core.Pt(panelMaxHeight - 2*panelBorderWidth)
+				}
+				frame := core.View{
+					StyleFunc: func() core.Style { return floatingPanelStyle(cx, transparent) },
+					Children:  []core.Node{inner},
+				}
+				return frame
+			}),
+		},
+	}
 	return window
 }
 
@@ -357,12 +416,68 @@ func (a *application) translationWorkspace(cx *core.Scope) core.Node {
 			Style:    core.Style{Width: core.Pt(118), Height: core.Pt(32)},
 		}
 	}
+	swapTurns := core.NewSignal(cx, 0)
+	swapLanguages := func() {
+		src, dst := a.source.Get(), a.target.Get()
+		nextSrc, nextDst := dst, src
+		switch {
+		case src == "auto" && dst == "smart":
+			if targetLanguage("auto", "smart", a.query.Get()) == "en" {
+				nextSrc, nextDst = "en", "zh"
+			} else {
+				nextSrc, nextDst = "zh", "en"
+			}
+		case src == "auto":
+			nextSrc = dst
+			if dst == "zh" {
+				nextDst = "en"
+			} else {
+				nextDst = "zh"
+			}
+		case dst == "smart":
+			if src == "zh" {
+				nextSrc, nextDst = "en", "zh"
+			} else {
+				nextSrc, nextDst = "zh", src
+			}
+		}
+		cx.Batch(func() {
+			a.source.Set(nextSrc)
+			a.target.Set(nextDst)
+			swapTurns.Update(increment)
+		})
+	}
+	swapIcon := core.Icon{
+		SVG:   lucide.ArrowLeftRight(),
+		Class: "size-3.5 text-text-muted",
+		StyleFunc: func() core.Style {
+			if ui.ReduceMotion(cx) {
+				return core.Style{}
+			}
+			return core.Style{
+				Transforms: rotateSteps(float32((swapTurns.Get() % 2) * 180)),
+				Transition: core.Transition{
+					Duration:   motionEnter,
+					Easing:     core.EaseOut,
+					Properties: core.TransitionTransform,
+				},
+			}
+		},
+	}
+	swapButton := base.Button{
+		Label:    "交换语言",
+		Tooltip:  label("交换源语言与目标语言", "text-xs"),
+		Class:    "size-7 items-center justify-center rounded-md text-text-muted " + buttonStates,
+		Style:    buttonMotion(cx, 0.90),
+		OnPress:  func(core.PressEvent) { swapLanguages() },
+		Children: []core.Node{swapIcon},
+	}
 	// Keep the editor's hit area above scrolled result rows.
-	composer := card(cx, "z-10 overflow-hidden",
+	composer := focusCard(cx, "z-10 overflow-hidden",
 		a.composerInput(cx, "翻译原文", a.query, "输入单词或粘贴一段文字…", 80, a.translate),
 		box("flex-row items-center gap-2 px-3 py-2 bg-surface-subtle border-t "+subtleBorder,
 			language("源语言", "auto", "自动识别", a.source),
-			glyphSm(lucide.ArrowRight(), faint),
+			swapButton,
 			language("目标语言", "smart", "中英互译", a.target),
 			core.Show{
 				When: func() bool {
@@ -380,6 +495,16 @@ func (a *application) translationWorkspace(cx *core.Scope) core.Node {
 				},
 			},
 			box("flex-1"),
+			core.Show{
+				When: func() bool { return a.query.Get() != "" },
+				Then: func(cx *core.Scope) core.Node {
+					return popReveal(cx, 0, compactIconButton(cx, "清空原文", lucide.X(), func() {
+						a.query.Set("")
+						a.clearTranslation()
+						a.focusEditor()
+					}))
+				},
+			},
 			translate,
 		),
 	)
@@ -418,10 +543,10 @@ func (a *application) translationResults(cx *core.Scope, copyText func(string), 
 		query := a.submitted
 		var meta []core.Node
 		if p := strings.TrimSpace(e.Phonetic); p != "" {
-			meta = append(meta, label(p, "font-mono text-sm "+muted))
+			meta = append(meta, box("px-2 py-0.5 rounded-md bg-inset", label(p, "font-mono text-xs "+muted)))
 		}
 		if pos := strings.TrimSpace(e.POS); pos != "" {
-			meta = append(meta, pill(pos, "bg-inset text-text-muted"))
+			meta = append(meta, pill(pos, "border border-accent-border bg-accent-tint text-accent"))
 		}
 		headword := box("gap-1.5",
 			core.Text{
@@ -530,10 +655,17 @@ func (a *application) translationResults(cx *core.Scope, copyText func(string), 
 			return core.View{}
 		}
 		return box("flex-row items-center gap-3.5 px-4 py-4 "+cardSubtle,
-			box("size-9 rounded-lg bg-accent-tint items-center justify-center", glyph(lucide.Languages(), accent)),
-			box("flex-1 gap-0.5",
-				label("输入文字后按 Enter 开始翻译", "text-sm font-semibold "+ink),
-				label("单个英文词将优先匹配本地离线词典，长句自动调用已启用的在线服务。", "text-xs "+muted),
+			box("size-10 rounded-xl border border-accent-border bg-accent-tint items-center justify-center shrink-0", glyph(lucide.Languages(), accent)),
+			box("flex-1 gap-1.5",
+				box("gap-0.5",
+					label("输入文字后按 Enter 开始翻译", "text-sm font-semibold "+ink),
+					label("单词优先查本地词典，句段自动并发请求已启用的在线服务。", "text-xs "+muted),
+				),
+				box("flex-row flex-wrap items-center gap-1.5",
+					pill("离线词典", "bg-inset text-text-muted"),
+					pill("多源对照", "bg-inset text-text-muted"),
+					pill("划词即译", "bg-inset text-text-muted"),
+				),
 			),
 		)
 	}

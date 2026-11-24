@@ -22,21 +22,41 @@ func (a *application) settingsView(cx *core.Scope) core.Node {
 	cx.SetTheme(workbenchTheme)
 	a.loadCredentials(cx)
 	window := desktop.CurrentWindow(cx)
-	cx.OnKeyWith("escape", core.KeyOptions{When: core.KeyAlways}, window.Close)
 	page := core.NewSignal(cx, settingsGeneral)
 	generalStatus := core.NewSignal(cx, a.hotkeyError)
 	serviceStatus := core.NewSignal(cx, a.keyStoreError)
 	general := a.generalSettings(cx, generalStatus)
-	providers := a.providerSettingsView(cx, serviceStatus)
+	providers, modalOpen, closeModal := a.providerSettingsView(cx, serviceStatus)
+	cx.OnKeyWith("escape", core.KeyOptions{When: core.KeyAlways}, func() {
+		if modalOpen() {
+			closeModal()
+			return
+		}
+		window.Close()
+	})
 
 	nav := func(title string, icon *core.SVG, target settingsPage) core.Node {
+		isSelected := func() bool { return page.Get() == target }
+		indicator := core.View{
+			Class: "w-1 h-4 rounded-full bg-accent",
+			StyleFunc: func() core.Style {
+				op := core.Alpha(0)
+				if isSelected() {
+					op = core.Alpha(1)
+				}
+				return core.Style{
+					Opacity:    op,
+					Transition: colorTransition,
+				}
+			},
+		}
 		return base.Button{
 			Label:    title,
-			Selected: func() bool { return page.Get() == target },
-			Class:    "flex-row items-center gap-2.5 px-3 h-9 rounded-lg text-text-muted " + buttonStates + " " + selectedFill + " aria-selected:text-accent",
+			Selected: isSelected,
+			Class:    "flex-row items-center gap-2 pl-1.5 pr-3 h-9 rounded-lg text-text-muted " + buttonStates + " " + selectedFill + " aria-selected:text-accent",
 			Style:    buttonMotion(cx, 0.975),
 			OnPress:  func(core.PressEvent) { page.Set(target) },
-			Children: []core.Node{glyphSm(icon, ""), label(title, "text-sm font-medium")},
+			Children: []core.Node{indicator, glyphSm(icon, ""), label(title, "text-sm font-medium")},
 		}
 	}
 	quitButton := base.Button{
@@ -51,7 +71,7 @@ func (a *application) settingsView(cx *core.Scope) core.Node {
 	}
 	sidebar := box("shrink-0 p-3 gap-1 border-r "+divider+" bg-surface",
 		box("px-2 pt-2 pb-4 flex-row items-center gap-2.5",
-			brandMark(),
+			brandMark(cx),
 			box("gap-0.5",
 				label("Go Ask", "text-sm font-semibold "+ink),
 				label("偏好设置", "text-xs "+muted),
@@ -179,7 +199,10 @@ func (a *application) generalSettings(cx *core.Scope, status *core.Signal[string
 	apply := action(cx, "应用快捷键", lucide.Check(), true, applyKey)
 	return box("gap-4 pb-4",
 		box("gap-2",
-			label("快捷键", "pl-1 text-xs font-semibold "+muted),
+			box("flex-row items-center gap-1.5 pl-1",
+				glyphSm(lucide.Keyboard(), accent),
+				label("快捷键", "text-xs font-semibold "+muted),
+			),
 			card(cx, "p-3.5 gap-3",
 				box("gap-0.5",
 					label("唤起 / 划词快捷键", "text-sm font-semibold "+ink),
@@ -189,7 +212,10 @@ func (a *application) generalSettings(cx *core.Scope, status *core.Signal[string
 			),
 		),
 		box("gap-2",
-			label("窗口行为", "pl-1 text-xs font-semibold "+muted),
+			box("flex-row items-center gap-1.5 pl-1",
+				glyphSm(lucide.SlidersHorizontal(), accent),
+				label("窗口行为", "text-xs font-semibold "+muted),
+			),
 			card(cx, "overflow-hidden",
 				box(settingRow,
 					core.View{
@@ -267,17 +293,24 @@ func aboutView(cx *core.Scope) core.Node {
 	return box("flex-1 justify-between p-5 gap-4 bg-background",
 		card(cx, "p-5 gap-4",
 			box("flex-row gap-3.5 items-center",
-				box("size-12 rounded-2xl items-center justify-center bg-accent", glyph(lucide.Terminal(), "text-accent-text")),
+				box("p-1.5 rounded-2xl border border-accent-border bg-accent-tint",
+					box("size-10 rounded-xl items-center justify-center bg-accent", glyph(lucide.Terminal(), "text-accent-text")),
+				),
 				box("gap-1",
 					box("flex-row items-center gap-2",
 						label("Go Ask", "text-xl font-semibold "+ink),
-						pill(version, "bg-accent-tint text-accent"),
+						pill(version, "border border-accent-border bg-accent-tint text-accent"),
 					),
 					label("桌面划词翻译与 AI 快速问答", "text-sm "+muted),
 				),
 			),
-			box("pt-3 border-t gap-1 "+subtleBorder,
+			box("pt-3 border-t gap-2 "+subtleBorder,
 				label("原生桌面引擎由 NSGo 驱动，离线英汉词条来自 ECDICT。", "text-xs "+muted),
+				box("flex-row flex-wrap items-center gap-1.5",
+					pill("NSGo", "bg-inset text-text-muted"),
+					pill("ECDICT", "bg-inset text-text-muted"),
+					pill("离线 + 多源", "bg-inset text-text-muted"),
+				),
 			),
 		),
 		box("flex-row justify-end", action(cx, "关闭", nil, true, closeWindow)),

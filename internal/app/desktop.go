@@ -69,7 +69,7 @@ func (h *desktopHost) openAbout() {
 	h.showTicket++
 	h.scope.Run(func() {
 		desktop.OpenWindow(h.scope, desktop.WindowOptions{
-			Key: "about", Title: "关于 Go Ask", Width: 420, Height: 268,
+			Key: "about", Title: "关于 Go Ask", Width: 420, Height: 292,
 			Constraints: desktop.WindowConstraints{NoResize: true},
 		}, aboutView)
 	})
@@ -142,7 +142,7 @@ func (h *desktopHost) panelBlurEnabled() bool {
 func (h *desktopHost) openPanel(hideOnBlur bool) {
 	h.scope.Run(func() {
 		panel := desktop.OpenPanel(h.scope, desktop.PanelOptions{
-			Width: panelWidth, Height: panelMaxHeight, FitContent: true, HideOnBlur: hideOnBlur,
+			Width: panelWidth + panelShadowHorizontal, Height: panelMaxHeight + panelShadowVertical, FitContent: true, Transparent: true, HideOnBlur: hideOnBlur,
 		}, h.app.root)
 		h.panel, h.panelHidesOnBlur = panel, hideOnBlur
 		h.content.Run(func() {
